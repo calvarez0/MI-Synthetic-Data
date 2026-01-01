@@ -1,13 +1,59 @@
-# MI Synthetic Data
+# Evolutionary Synthetic Data Generation for Motivational Interviewing
 
-"main.py" is the code for running the automatic MI pair generation.
+An LLM pipeline that generates, evaluates, and curates high-quality synthetic training data for Motivational Interviewing (MI)—specifically cannabis counseling dialogues.
 
-"cannabis_generation.log" has the terminal output of the whole process.
+## How It Works
 
-"mi_dialogue_archive.json" has information about the pairs and their scores.
+Two local LLMs work together in an evolutionary loop:
 
-"mi_training_data.json" has all the pairs ordered in decreasing rank.
+```
+Generator (WizardLM) ──▶ Evaluator (LLaMA 3) ──▶ Archive (Top-K)
+        │                       │                      │
+   Creates client          Scores using           Keeps only
+   scenarios + MI          MITI 4.2.1            highest-scoring
+   therapist responses     clinical criteria      examples
+        │                                              │
+        └──────────── Diversity feedback ◀─────────────┘
+```
 
-"first_alpaca" is folder that holds the correct format for fine-tuning the LLM (I think the fine-tuning package is called alpaca).
+1. **Generator** creates realistic client utterances with clinical context, then produces MI-adherent therapist responses
+2. **Evaluator** scores each dialogue on realism (1-5) and MI fidelity (1-5) using MITI 4.2.1 criteria
+3. **Archive** maintains a quality-ranked collection, discarding lower-scoring examples over time
 
-"convert_to_alpaca.py" is a python script that converts the top 100 pairs from mi_training_data.json to mi_alpaca_format.json.
+The key MI constraint: therapist responses must elicit *change talk* ("I want to cut back") and avoid eliciting *sustain talk* ("It helps me relax").
+
+## Files
+
+| File | Description |
+|------|-------------|
+| `main.py` | Core generation pipeline—run this to generate data |
+| `convert_to_alpaca.py` | Converts top examples to Alpaca format for fine-tuning |
+| `mi_dialogue_archive.json` | Full archive with all metadata and scores |
+| `mi_training_data.json` | Ranked training pairs (top-K by score) |
+| `mi_alpaca_format_81.json` | Ready-to-use Alpaca format dataset |
+| `cannabis_generation.log` | Terminal output from generation run |
+
+## Usage
+
+Requires [Ollama](https://ollama.ai/) running locally with `wizardlm2:7b` and `llama3.2:latest`.
+
+```bash
+# Generate single dialogue
+python main.py --mode single
+
+# Run continuous generation
+python main.py --mode continuous --target 100
+
+# Convert top 100 to Alpaca format
+python convert_to_alpaca.py
+```
+
+## Example Output
+
+**Context:** 35-year-old teacher, daily edible use for stress, partner noticed forgetfulness and missed deadlines. Contemplation stage.
+
+**Client:** "I guess I'm here because my partner wanted me to check this out. He thinks I'm using too much. But honestly, it helps me unwind after teaching. I don't think I have a problem—it's more like a routine. But my partner mentioned I've been forgetful, even missing an important deadline. Maybe there's something to this after all."
+
+**Therapist:** "It sounds like you've been grappling with some tough challenges lately. You mentioned your partner's concerns have been on your mind, and you're noticing the pattern of daily use. You've recognized the potential for marijuana to serve as a way to numb out from life's demands—that shows self-awareness. Can you tell me more about what changes you're hoping to see that could align with your values?"
+
+**Scores:** Realism: 4.38 | MI Fidelity: 3.69 | Total: 3.90
